@@ -1,0 +1,1 @@
+{"lr": 1e-05, "dataset": "MitchellEtAl-13-OpenSentiment,SemEval2017,Amazon,IMDB,Yelp", "save_dir": "/home/guimin/NTM/results/absa_fl_ntm_MitchellEtAl-13-OpenSentiment,SemEval2017,Amazon,IMDB,Yelp_1e-05/MitchellEtAl-13-OpenSentiment,SemEval2017,Amazon,IMDB,Yelp_bts_32_lr_1e-05_warmup_0.06_seed_40_2021-01-06-15-13-34"}
