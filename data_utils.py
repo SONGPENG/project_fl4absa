@@ -105,7 +105,7 @@ class DataProcessor(object):
         with open(file_path, 'r', encoding='utf-8', newline='\n', errors='ignore') as fin:
             for i, line in enumerate(fin):
                 line = line.replace('!',' ').replace('@',' ').replace('(',' ').replace(')',' ').replace('{',' ').replace('}',' ').replace('[',' ').replace(']',' ').replace(';',' ').replace(':',' ').replace('"',' ').\
-                replace('\'',' ').replace('?',' ')
+                replace('\'',' ').replace('?',' ').replace(',',' ').replace('...',' ')
                 sentence_list.append(line)
         return sentence_list
     
@@ -132,7 +132,7 @@ class DataProcessor(object):
                     if vocab_dict.get(word, -1) == -1:
                         vocab_dict[word] = 0
                     vocab_dict[word] += 1
-                    if vocab_dict[word] > 1:
+                    if vocab_dict[word] > 10:
                         vocab.add(word)
         return list(vocab)
 

@@ -71,7 +71,7 @@ def main():
 
     task_list = []
 
-    batchsizes = [64]
+    batchsizes = [32]
     lrs = [1e-5]
     warmups = [0.06]
     args.datasets = "MitchellEtAl-13-OpenSentiment,SemEval2017,Amazon,IMDB,Yelp"
