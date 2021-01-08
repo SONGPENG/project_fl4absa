@@ -41,8 +41,8 @@ class NTMModel(nn.Module):
             valid_output[i][:temp.size(0)] = temp
         return valid_output
         
-    def _get_topic_word_distribution():
-        return self.R.state_dict()
+    def get_topic_word_distribution(self):
+        return self.R.weight
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels = None):
         sequence_output = self.hidden_encoder(input_ids)

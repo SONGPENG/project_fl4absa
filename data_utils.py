@@ -39,18 +39,12 @@ class DiaDataset(Dataset):
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
-    def __init__(self, data_dir, tokenizer, w_vocab_path = None, max_seq_len=512, batch_size=16):
+    def __init__(self, data_dir, tokenizer, max_seq_len=512, batch_size=16):
         self.data_dir = data_dir
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
         self.batch_size = batch_size
-        self.w_vocab = ["[pad]", "[unk]"]
-        if w_vocab_path is not None:
-            with open(w_vocab_path, 'r') as f:
-                for line in f:
-                    self.w_vocab.append(line.strip())
-        self.w_vocab_dict = {w:i for i,w in enumerate(self.w_vocab)}
-
+        self.vocab_size = 0
 
     def get_train_examples(self, dataset):
         """See base class."""
@@ -74,18 +68,24 @@ class DataProcessor(object):
 
     def get_tag_size(self):
         return len(self.get_labels())
+    
+    def get_vocab_size(self):
+        return self.vocab_size
 
     def _create_examples(self, lines, set_type):
+        """
         examples = []
         for i, (sentence, seg_list, aspect, label) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
             examples.append(InputExample(guid=guid, text=sentence, aspect=aspect, seg_list=seg_list, label=label))
-        return examples
+        """
+        return lines
 
     def _read_txt(self, file_path):
         '''
         read file
         return format :
+        '''
         '''
         datas = []
         sentence_list = []
@@ -100,68 +100,74 @@ class DataProcessor(object):
                 polarity = data[2]
                 sentence = aspect.join(seg_list)
                 sentence_list.append([sentence, seg_list, aspect, polarity])
-
+        '''
+        sentence_list = []
+        with open(file_path, 'r', encoding='utf-8', newline='\n', errors='ignore') as fin:
+            for i, line in enumerate(fin):
+                line = line.replace('!',' ').replace('@',' ').replace('(',' ').replace(')',' ').replace('{',' ').replace('}',' ').replace('[',' ').replace(']',' ').replace(';',' ').replace(':',' ').replace('"',' ').\
+                replace('\'',' ').replace('?',' ').replace(',',' ').replace('...',' ')
+                sentence_list.append(line)
         return sentence_list
+    
+    def verify_word(self, word):
+        lower_case = []
+        upper_case = []
+        for i in range(26):
+            lower_case.append(chr(97 + i))
+            upper_case.append(chr(65 + i))
+        for char in word:
+            if char in lower_case or char in upper_case:
+                return True
+        return False
+    
+    def create_vocab(self, examples):
+        vocab = set()
+        vocab_dict = {}
+        for example in examples:
+            words = example.strip().split(' ')
+            for word in words:
+                if word == '':
+                    continue
+                if self.verify_word(word):
+                    if vocab_dict.get(word, -1) == -1:
+                        vocab_dict[word] = 0
+                    vocab_dict[word] += 1
+                    if vocab_dict[word] > 10:
+                        vocab.add(word)
+                        
+        vocab_file_path = os.path.join(os.getcwd(), 'data', 'generative_vocab.txt')
+        if os.path.exists(vocab_file_path):
+            f = open(vocab_file_path, 'r', encoding='utf-8')
+            vocab = f.read().split('\n')
+            f.close()
+        else:
+            vocab = self.create_vocab(examples)
+            f = open(vocab_file_path, 'w', encoding='utf-8')
+            for va in vocab:
+                f.write(va + '\n')
+            f.close()
+        self.vocab_size = len(vocab)   
+        return list(vocab)
 
-    def convert_examples_to_features(self, tokenizer, examples, max_seq_length):
+    def convert_examples_to_features(self, tokenizer, examples, vocab, word_2_id):
         """Loads a data file into a list of `InputBatch`s."""
-
-        label_map = self.get_label_map()
-
         features = []
+        #word_2_id = {word:i for i, word in enumerate(vocab)}
+        vocab_size = len(vocab)
         for (ex_index, example) in enumerate(examples):
-            text = example.text
-            label = example.label
-            aspect = example.aspect
-            tokens = tokenizer.tokenize(text)
-            aspect_tokens = tokenizer.tokenize(aspect)
-            if len(tokens) + len(aspect_tokens) + 3 > max_seq_length:
-                tokens = tokens[:max_seq_length-3-len(aspect_tokens)]
-            ntokens = ["[CLS]"] + tokens + ["[SEP]"] + aspect_tokens + ["[SEP]"]
-            input_ids = tokenizer.convert_tokens_to_ids(ntokens)
-            input_mask = [1] * len(input_ids)
-            segment_ids = [0] * (len(tokens)+2) + [1] * (len(aspect_tokens)+1)
-            while len(input_ids) < max_seq_length:
-                input_ids.append(0)
-                input_mask.append(0)
-                segment_ids.append(0)
-            label_id = label_map[label]
-
-            w_tokens = text.split(" ")
-            w_input_ids = [self.w_vocab_dict.get(w, 1) for w in w_tokens]
-            if len(w_tokens) < max_seq_length:
-                w_input_ids += [0] * (max_seq_length-len(w_tokens))
-            else:
-                w_input_ids = w_input_ids[:max_seq_length]
-
-            assert len(input_ids) == max_seq_length
-            assert len(input_mask) == max_seq_length
-            assert len(segment_ids) == max_seq_length
-
-            if ex_index < 5:
-                logging.info("*** Example ***")
-                logging.info("guid: %s" % (example.guid))
-                logging.info("tokens: %s" % " ".join(
-                    [str(x) for x in tokens]))
-                logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-                logging.info("w_input_ids: %s" % " ".join([str(x) for x in w_input_ids]))
-                logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-                logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-                logging.info("label: %s (id = %s)" % (label_id, label))
-
-            features.append({
-                "input_ids":torch.tensor(input_ids, dtype=torch.long),
-                "w_input_ids":torch.tensor(w_input_ids, dtype=torch.long),
-                "input_mask":torch.tensor(input_mask, dtype=torch.long),
-                "segment_ids":torch.tensor(segment_ids, dtype=torch.long),
-                "label_ids":torch.tensor(label_id, dtype=torch.long),
-            })
-        return features
+            text = example
+            tmp = [0 for i in range(vocab_size)]
+            words = text.strip().split(' ')
+            for word in words:
+                if word == '':
+                    continue
+                if word in vocab:
+                    tmp[word_2_id[word]] += 1
+            features.append(tmp)
+            
+        return torch.tensor(features, dtype=torch.long)
 
     def _get_dataloader(self, features, batch_size, mode='train', rank=0, world_size=1):
-        if mode == "train" and world_size > 1:
-            features = features[rank::world_size]
-
         data_set = DiaDataset(features)
         sampler = RandomSampler(data_set)
         return DataLoader(data_set, sampler=sampler, batch_size=batch_size)
@@ -171,14 +177,15 @@ class DataProcessor(object):
         train_examples = []
         for dataset in dataset_list:
             train_examples.extend(self.get_train_examples(dataset))
-        train_features = self.convert_examples_to_features(tokenizer, train_examples, self.max_seq_len)
-        train_dataloader = self._get_dataloader(train_features, mode="train", batch_size=self.batch_size)
-        return train_dataloader
+        vocab = self.create_vocab(train_examples)
+        #train_features = self.convert_examples_to_features(tokenizer, train_examples)
+        train_dataloader = self._get_dataloader(train_examples, mode="train", batch_size=self.batch_size)
+        return train_dataloader, vocab
 
     def get_test_dataloader(self, dataset):
         tokenizer = self.tokenizer
         test_examples = self.get_test_examples(dataset)
-        test_features = self.convert_examples_to_features(tokenizer, test_examples, self.max_seq_len)
+        test_features = self.convert_examples_to_features(tokenizer, test_examples)
         test_dataloader = self._get_dataloader(test_features, mode="test", batch_size=self.batch_size)
         return test_dataloader
 
@@ -186,12 +193,12 @@ class DataProcessor(object):
         tokenizer = self.tokenizer
         #train
         train_examples = self.get_train_examples(dataset)
-        train_features = self.convert_examples_to_features(tokenizer, train_examples, self.max_seq_len)
+        train_features = self.convert_examples_to_features(tokenizer, train_examples)
         train_dataloader = self._get_dataloader(train_features, mode="train", batch_size=self.batch_size)
 
         # test
         test_examples = self.get_test_examples(dataset)
-        test_features = self.convert_examples_to_features(tokenizer, test_examples, self.max_seq_len)
+        test_features = self.convert_examples_to_features(tokenizer, test_examples)
         test_dataloader = self._get_dataloader(test_features, mode="test", batch_size=self.batch_size)
 
         # dev
@@ -199,11 +206,3 @@ class DataProcessor(object):
 
         return train_dataloader, test_dataloader, dev_dataloader
 
-def seq_reduce_ret_len(batch_data, pad=0):
-    batch_size, seq_len = batch_data.shape
-    max_seq_len = seq_len
-    while max_seq_len > 1:
-        if (batch_data[:,max_seq_len-1] != pad).sum().item() > 0:
-            break
-        max_seq_len -= 1
-    return max_seq_len

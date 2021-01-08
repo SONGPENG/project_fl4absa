@@ -75,6 +75,7 @@ def main():
     lrs = [1e-5]
     warmups = [0.06]
     args.datasets = "MitchellEtAl-13-OpenSentiment,SemEval2017,Amazon,IMDB,Yelp"
+    #args.datasets = "SemEval2017"
     for lr in lrs:
         for warmup in warmups:
             for batchsize in batchsizes:

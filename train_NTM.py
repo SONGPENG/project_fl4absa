@@ -88,6 +88,7 @@ class Instructor:
 
         min_loss = 1000
         args = self.args
+        word_2_id = {word:i for i, word in enumerate(self.vocab)}
         results = {"bert_model": args.bert_model, "dataset": args.dataset, "warmup":args.warmup_proportion,
                    "batch_size": args.batch_size * args.world_size * args.gradient_accumulation_steps,
                    "learning_rate": args.learning_rate, "seed": args.seed, "num_layers":args.num_layers}
@@ -101,7 +102,7 @@ class Instructor:
             model.train()
             for i_batch, sample_batched in enumerate(train_data_loader):
                 # clear gradient accumulators
-                input_ids = sample_batched
+                input_ids = self.data_processor.convert_examples_to_features(self.tokenizer, sample_batched, self.vocab, word_2_id)
                 if args.fp16:
                     input_ids = torch.tensor(input_ids, dtype = torch.half)
                 loss = model(input_ids.to(self.args.device))
@@ -145,6 +146,10 @@ class Instructor:
                 results["{}_best_loss".format(dataset)] = min_loss
                 if self.args.save:
                     self.saving_model(self.args.outdir, model, optimizer)
+                    weight = model.module.R.weight
+                    output_weight_file = os.path.join(self.args.outdir, 'weight_matrix.bin')
+                    torch.save(weight, output_weight_file)
+                    
         with open(output_eval_file, "w") as writer:
             for k, v in results.items():
                 writer.write("{}={}\n".format(k, v))
@@ -190,10 +195,11 @@ class Instructor:
     def run(self):
         self.save_args()
         
-        train_dataloader = self.data_processor.get_all_train_dataloader(self.dataset_list)
+        train_dataloader, vocab = self.data_processor.get_all_train_dataloader(self.dataset_list)
+        self.vocab = vocab
 
         vocab_size = self.data_processor.get_vocab_size()
-        model = NTMModel(vocab_size=vocab_size, topic_size=4)
+        model = NTMModel(vocab_size=vocab_size, topic_size=30)
         #model._reset_params(self.args.initializer)
         model = model.to(self.args.device)
 
@@ -249,7 +255,7 @@ class Instructor:
             model = DDP(model)
         elif self.args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
-
+        print("Begin training...")
         self._train(model, optimizer, scheduler, train_dataloader)
 
 
