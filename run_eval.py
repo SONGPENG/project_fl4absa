@@ -33,6 +33,8 @@ def get_eval_result(task_name, eval_result_path):
         best_epoch = 0
         best_score = 0
         for i in range(30):
+            if "laptop_{}_f1".format(i) not in res:
+                break
             score = sum([float(res["{}_{}_f1".format(t, i)])*w for t,w in weight_dict.items()])
             if score > best_score:
                 best_score = score

@@ -39,11 +39,18 @@ class DiaDataset(Dataset):
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
-    def __init__(self, data_dir, tokenizer, max_seq_len=512, batch_size=16):
+    def __init__(self, data_dir, tokenizer, w_vocab_path = None, max_seq_len=512, batch_size=16):
         self.data_dir = data_dir
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
         self.batch_size = batch_size
+        self.w_vocab = ["[pad]", "[unk]"]
+        if w_vocab_path is not None:
+            with open(w_vocab_path, 'r') as f:
+                for line in f:
+                    self.w_vocab.append(line.strip())
+        self.w_vocab_dict = {w:i for i,w in enumerate(self.w_vocab)}
+
 
     def get_train_examples(self, dataset):
         """See base class."""
@@ -120,6 +127,13 @@ class DataProcessor(object):
                 segment_ids.append(0)
             label_id = label_map[label]
 
+            w_tokens = text.split(" ")
+            w_input_ids = [self.w_vocab_dict.get(w, 1) for w in w_tokens]
+            if len(w_tokens) < max_seq_length:
+                w_input_ids += [0] * (max_seq_length-len(w_tokens))
+            else:
+                w_input_ids = w_input_ids[:max_seq_length]
+
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
@@ -130,12 +144,14 @@ class DataProcessor(object):
                 logging.info("tokens: %s" % " ".join(
                     [str(x) for x in tokens]))
                 logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+                logging.info("w_input_ids: %s" % " ".join([str(x) for x in w_input_ids]))
                 logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
                 logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
                 logging.info("label: %s (id = %s)" % (label_id, label))
 
             features.append({
                 "input_ids":torch.tensor(input_ids, dtype=torch.long),
+                "w_input_ids":torch.tensor(w_input_ids, dtype=torch.long),
                 "input_mask":torch.tensor(input_mask, dtype=torch.long),
                 "segment_ids":torch.tensor(segment_ids, dtype=torch.long),
                 "label_ids":torch.tensor(label_id, dtype=torch.long),
