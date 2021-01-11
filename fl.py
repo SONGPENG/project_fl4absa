@@ -58,15 +58,18 @@ class TMN(nn.Module):
         w = torch.cat((torch.zeros([2,self.topic_size]),w), 0)
         self.vocab_size += 2
         self.key_emb = nn.Embedding.from_pretrained(w)
-        self.val_emb = nn.Embedding.from_pretrained(w.t())
+        # self.val_emb = nn.Embedding.from_pretrained(w.t())
+        self.val_emb = nn.Embedding(self.topic_size, hidden_size)
         self.src_topic_dense = nn.Linear(1, hidden_size)
-        self.tgt_topic_dense = nn.Linear(self.vocab_size, hidden_size)
+        self.tgt_topic_dense = nn.Linear(hidden_size, hidden_size)
+        self.hidden_state_dense = nn.Linear(hidden_size, hidden_size)
         self.softmax = torch.nn.Softmax(dim = 1)
+        self.activation = nn.Tanh()
         # self.tgt_topic = self.ret_tgt_topic()
 
     def ret_tgt_topic(self):
         topic_input_ids = torch.tensor(list(range(self.topic_size)))
-        return self.tgt_topic_dense(self.val_emb(topic_input_ids))
+        return self.activation(self.tgt_topic_dense(self.val_emb(topic_input_ids)))
 
     def ret_topics_prob_w(self,  input_ids):
         output = self.key_emb(input_ids).sum(dim=-2)
@@ -84,7 +87,8 @@ class TMN(nn.Module):
                 input_len_list.append([input_len])
             return torch.tensor(input_len_list).to(input_ids.device)
         topic_output = (self.key_emb(input_ids).sum(dim=-2) / get_input_len()).unsqueeze(-1)
-        topic_output = self.src_topic_dense(topic_output)
+        topic_output = self.activation(self.src_topic_dense(topic_output))
+        hidden_state = self.activation(self.hidden_state_dense(hidden_state))
         return self.softmax(torch.mul(topic_output, hidden_state.unsqueeze(1)).sum(2))
 
     def forward(self, input_ids, hidden_state):

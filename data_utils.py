@@ -9,6 +9,7 @@ class InputExample(object):
 
     def __init__(self, guid, text, aspect, seg_list=[], label=None):
         """Constructs a InputExample.
+
         Args:
             guid: Unique id for the example.
             text_a: string. The untokenized text of the first sequence. For single

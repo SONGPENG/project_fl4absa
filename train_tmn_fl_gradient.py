@@ -158,10 +158,22 @@ class Instructor:
         args = self.args
 
         num_labels = self.data_processor.get_tag_size()
-        model = TMNModel.from_pretrained(self.args.bert_model, num_labels=num_labels,
+        model = TMNModel.from_pretrained(args.bert_model, num_labels=num_labels,
                                          topic_model_path=args.topic_model_path, topic_method=args.topic_method)
-        model._reset_params(self.args.initializer)
-        model = model.to(self.args.device)
+        model._reset_params(args.initializer)
+        model = model.to(args.device)
+
+        terminal_dict = {}
+        max_sample_num = 0
+        dataset_list = args.dataset.split(",")
+        print("dataset: {}".format(args.dataset))
+        for dataset in dataset_list:
+            terminal_dict[dataset] = TerminalInstructor(args, dataset, args.device)
+            sample_num = len(terminal_dict[dataset].train_dataloader) * args.batch_size
+            if sample_num > max_sample_num:
+                max_sample_num = sample_num
+        steps_per_epoch = int(max_sample_num / args.batch_size / args.sample_step)
+        args.total_step = steps_per_epoch * args.num_epoch
 
         # Prepare optimizer
         param_optimizer = list(model.named_parameters())
@@ -171,27 +183,16 @@ class Instructor:
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
         optimizer = BertAdam(optimizer_grouped_parameters,
-                             lr=self.args.learning_rate,
-                             warmup=self.args.warmup_proportion,
-                             t_total=self.args.total_step)
-
-        terminal_dict = {}
-        max_sample_num = 0
-        dataset_list = self.args.dataset.split(",")
-        print("dataset: {}".format(self.args.dataset))
-        for dataset in dataset_list:
-            terminal_dict[dataset] = TerminalInstructor(args, dataset, self.args.device)
-            sample_num = len(terminal_dict[dataset].train_dataloader) * args.batch_size
-            if sample_num > max_sample_num:
-                max_sample_num = sample_num
-        steps_per_epoch = int(max_sample_num / args.batch_size / args.sample_step)
+                             lr=args.learning_rate,
+                             warmup=args.warmup_proportion,
+                             t_total=args.total_step)
 
         results = {"bert_model": args.bert_model, "dataset": args.dataset, "warmup":args.warmup_proportion,
                    "batch_size": args.batch_size * args.world_size * args.gradient_accumulation_steps,
                    "learning_rate": args.learning_rate, "seed": args.seed, "sample_step": args.sample_step,
                    "best_f1": 0, "frac": args.frac, "topic_method":args.topic_method,
                    "topic_model_path":args.topic_model_path}
-        for epoch in trange(self.args.num_epoch, desc="Epoch"):
+        for epoch in trange(args.num_epoch, desc="Epoch"):
             n_correct, n_total, loss_total = 0,0,0
             att_list = [1.0/len(dataset_list) for i in range(len(dataset_list))]
             for _ in range(steps_per_epoch):
@@ -227,13 +228,13 @@ class Instructor:
                 results["best_epoch"] = epoch
                 results["best_f1"] = avg_f1
                 results["best_precision"] = avg_precision
-                saving_model_path = os.path.join(self.args.outdir, 'epoch-{}'.format(epoch))
+                saving_model_path = os.path.join(args.outdir, 'epoch-{}'.format(epoch))
                 results["best_checkpoint"] = saving_model_path
 
-                if self.args.save and is_main_process():
+                if args.save and is_main_process():
                     self.saving_model(saving_model_path, model, optimizer)
 
-            output_eval_file = os.path.join(self.args.outdir, "eval_results.txt")
+            output_eval_file = os.path.join(args.outdir, "eval_results.txt")
             with open(output_eval_file, "w") as writer:
                 for k, v in results.items():
                     writer.write("{}={}\n".format(k, v))
