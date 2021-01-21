@@ -71,7 +71,7 @@ def main():
     task_list = []
 
     batchsizes = [32]
-    lrs = [4e-5]
+    lrs = [1e-5, 2e-5, 4e-5, 5e-5]
     for lr in lrs:
         for warmup in warmups:
             for batchsize in batchsizes:

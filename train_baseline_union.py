@@ -98,10 +98,8 @@ class Instructor:
             n_correct, n_total, loss_total = 0, 0, 0
             # switch model to training mode
             model.train()
-            xx = 0
+            
             for dataset in self.dataset_list:
-                precisions = []
-                f1s = []
                 for i_batch, sample_batched in enumerate(train_data_loader_dict[dataset]):
                     # clear gradient accumulators
                     reduce_seq_len = seq_reduce_ret_len(sample_batched["input_ids"])
@@ -148,34 +146,28 @@ class Instructor:
                             logger.info('global_step: {}, loss: {:.4f}, acc: {:.4f} '
                                         'lr: {:.6f}'.format(global_step, train_loss, train_acc, optimizer.get_lr()[0]))
 
-                xx += 1
-                dev_dataloader = dev_dataloader_dict[dataset]
-                test_dataloader = test_dataloader_dict[dataset]
-                dev_result = self._evaluate_acc_f1(model, dev_dataloader)
-                precisions.append(dev_result["precision"])
-                f1s.append(dev_result["f1"])
-                for k, v in dev_result.items():
-                    results["{}_{}_val_{}".format(dataset, epoch, k)] = v
-                results.update(dev_result)
-                
-                test_result = self._evaluate_acc_f1(model, test_dataloader)
-                for k, v in test_result.items():
-                    results["{}_test_{}".format(dataset, k)] = v
-                    results["{}_{}_test_{}".format(dataset, epoch, k)] = v
-                
-                if xx == len(self.dataset_list):
-                    xx = 0
-                    avg_precision = sum(precisions) / len(precisions)
-                    avg_f1 = sum(f1s) / len(f1s)
-                    if avg_f1 > results["best_f1"]:
-                        results["best_epoch"] = epoch
-                        results["best_f1"] = avg_f1
-                        results["best_precision"] = avg_precision
+                def eval_per_dataset(dataset):
+                    dev_dataloader = dev_dataloader_dict[dataset]
+                    test_dataloader = test_dataloader_dict[dataset]
+                    dev_result = self._evaluate_acc_f1(model, dev_dataloader)
+                    for k, v in dev_result.items():
+                        results["{}_{}_val_{}".format(dataset, epoch, k)] = v
+                    results.update(dev_result)
+                    if dev_result['f1'] > results["{}_best_f1".format(dataset)]:
+                        results["{}_best_epoch".format(dataset)] = epoch
+                        results["{}_best_f1".format(dataset)] = dev_result['f1']
                         saving_model_path = os.path.join(self.args.outdir, 'epoch-{}'.format(epoch))
-                        results["best_checkpoint"] = saving_model_path
+                        results["{}_best_checkpoint".format(dataset)] = saving_model_path
 
                         if self.args.save and is_main_process():
                             self.saving_model(saving_model_path, model, optimizer)
+
+                        test_result = self._evaluate_acc_f1(model, test_dataloader)
+                        for k, v in test_result.items():
+                            results["{}_test_{}".format(dataset, k)] = v
+                            results["{}_{}_test_{}".format(dataset, epoch, k)] = v
+            
+                eval_per_dataset(dataset)
                 
                 output_eval_file = os.path.join(self.args.outdir, "eval_results.txt")
                 with open(output_eval_file, "w") as writer:
