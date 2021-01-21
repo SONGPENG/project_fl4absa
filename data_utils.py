@@ -174,6 +174,13 @@ class DataProcessor(object):
         train_features = self.convert_examples_to_features(tokenizer, train_examples, self.max_seq_len)
         train_dataloader = self._get_dataloader(train_features, mode="train", batch_size=self.batch_size)
         return train_dataloader
+    
+    def get_train_dataloader(self, dataset):
+        tokenizer = self.tokenizer
+        train_examples = self.get_train_examples(dataset)
+        train_features = self.convert_examples_to_features(tokenizer, train_examples, self.max_seq_len)
+        train_dataloader = self._get_dataloader(train_features, mode="train", batch_size=self.batch_size)
+        return train_dataloader
 
     def get_test_dataloader(self, dataset):
         tokenizer = self.tokenizer
